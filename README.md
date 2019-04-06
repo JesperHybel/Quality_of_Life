@@ -12,6 +12,12 @@ The gain people have in terms of higher wages are therefore not simply channeled
 
 ![alt text](https://github.com/JesperHybel/Quality_of_Life/blob/master/ezgif-5-a426dc63ca.pdf-1.png)
 
+This offcourse raise the question who is the most clever? Is it the person who suffer the high rents of cities but enjoy the high wages and short distance to work, is it the person who enjoy low housing price of the country side suffering the long daily commute to high paying job in the city or is it rather the person who live in the country side and enjoys low housing prices and while simultaneously enjoying a short commute having chosen also to work in the country side even though this means suffering a relatively low wage? 
+
+Economist in general credit people with the capability of making sane choices. Hence if people really are free to live and work where they prefer and all people are similar to the extent of enjoying some consumption while disliking transportation, this puts a limit on how much better one place can be in relation to another. A city that offers both high wages and low rents will quicly see itself subject to growth pushing up the housing prices. Desolate places becomes attractive as places of transportation investments connecting previously remote areas with already developed areas making a daily commute possible. However in equilibrium where the forces of attraction - high wages luring people towards the cities - are balanced by the powers of dispersion - the high rents pushing people out of cities all all people must be more or less content with living and working at the locations they have chosen. This suggests that we can add up the opportunities of a location in terms of access to labor market as given by the wage level of peoples choice of job location, the transportation costs derived from location of residence and work and finally the costs of local goods in terms primarily of rents. And in equilibrium the sum of these things for any location add up evenly if noone is to be assumed to have made a less sane choice.
+
+To the extent that these things do not add up something unobserved could then be hypothesized to exist in order to somehow balance the equation. This something could be referred to as the livability of the location. 
+
 
 ![alt text](https://github.com/JesperHybel/Quality_of_Life/blob/master/ezgif-5-43cfde1a8c.pdf-1.png)
 
