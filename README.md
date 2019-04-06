@@ -4,7 +4,7 @@ What makes life worth living? Life is very much about making the right location 
 
 ![alt text](https://github.com/JesperHybel/Quality_of_Life/blob/master/ezgif-5-0449e3e9e3.pdf-1.png)
 
-To avoid transportation cost people therefore prefer to locate in or around cities increasing the demand for housing in these areas. Funneling the savings in terms of avoided transportation costs into demand for housing in cities which partly make cities grow and partly push up rents. This is illustrated on the map below where it can be observed that just as wages are high in the area around the capital so are housing prices.
+To avoid transportation costs people therefore prefer to locate in or around cities increasing the demand for housing in these areas. Funneling the savings in terms of avoided transportation costs into demand for housing in cities which partly make cities grow and partly push up rents. This is illustrated on the map below where it can be observed that just as wages are high in the area around the capital so are housing prices.
 
 ![alt text](https://github.com/JesperHybel/Quality_of_Life/blob/master/ezgif-5-591e1dcada.pdf-1.png)
 
