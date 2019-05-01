@@ -1,0 +1,325 @@
+
+
+	# Load packages 
+	rm(list=ls())
+	setwd("C://users//jeshyb//desktop//trans//data")
+	library(plyr)
+	library(dplyr)
+	library(mapDK)
+	library(rvest)
+	library(stringdist)
+	library(sna)
+	library(osmdata)
+	library(sf)
+	library(sp)
+	library(tmap)
+	library(tmaptools)
+	library(xtable)
+	library(stargazer)
+	
+	# Functions used
+		matchnames <- function(x,y,maxdist=10)
+			{
+
+				R <- length(x)
+				temp <- list()
+				temp$old <- x
+				temp$new <- rep("",R)
+				temp$n <- rep(NA,R)
+				for (i in 1:R)
+				{
+					m <- amatch(x[i],y,maxDist=maxdist)
+					temp$new[i] <- y[m]
+					temp$n[i] <- m
+				}
+				return(temp)
+		}
+
+	
+	####################################
+	# Load transport model data and calculate 
+	# 1) Number of trips from municipality a to b ... N(a,b)
+	# 2) Cost of trip from municipality a to b ... C(a,b)
+	# 3) Time of trips from municipality a to b ... T(a,b)
+	####################################
+	
+	tr <- read.table("LoS2010.csv",sep=",",header=TRUE)
+	
+	
+	# Generate municipality variable
+	tr$mun_from <-  as.numeric(substr(tr$FromZoneID, 0, 3))
+	tr$mun_to <- as.numeric(substr(tr$ToZoneID, 0, 3))
+	tr$mun_from <- ifelse(tr$mun_from%in%c(102,103),101,tr$mun_from)
+	tr$mun_to <- ifelse(tr$mun_to%in%c(102,103),101,tr$mun_to)
+
+	# Sort data 
+	tr <- tr[order(tr$mun_from,tr$mun_to),]
+	
+	dt <- data.frame(mun_from=tr$mun_from, mun_to=tr$mun_to)
+	
+	# Constant for calculation of cost of travel
+	
+	con <- c("KrPerKM"=0.8,"VTT"=1.092,"CongT"=1.35,"FerryT"=0.75,
+	"FerryWT"=0.3,"ArrPre"=1,"WaitT"=1.5,"WalkT"=1.5,"AccEgrT"=1,"HWtime"=0.5,
+	"HWtime"=0.5,"GScar"=1.1)
+	
+	
+	CarCost <- tr$MonetaryCost10 + con["KrPerKM"] * tr$DriveLength10
+	CarTimeCost <-  tr$Freetime10 + tr$Congtime10 * con["CongT"] + 
+	tr$Ferrytime10 * con["FerryT"] + tr$FerryWaitTime10 * con["FerryWT"] + tr$ArrPreDep10 * con["ArrPre"]
+	Ccar <- CarCost + con["VTT"] * CarTimeCost
+	Tcar <- tr$Freetime10 + tr$Congtime10 + tr$Ferrytime10 + tr$FerryWaitTime10 + tr$ArrPreDep10 
+	tr$Tcar <- Tcar
+	
+	PubCost <- tr$PriceCard1010 
+	PubTimeCost <- tr$InVehicleT10 + tr$WaitT10 * con["WaitT"] + tr$WalkT10 * con["WalkT"] + 
+	tr$ZoneConT10 * con["AccEgrT"] + tr$ZoneWaitT10 * con["HWtime"]
+	Cpub <- PubCost + con["VTT"] * PubTimeCost 
+	Tpub <- tr$InVehicleT10 + tr$WaitT10 + tr$WalkT10 + tr$ZoneConT10 + tr$ZoneWaitT10
+	tr$Tpub <- Tpub
+	
+	tr$mun_com <- paste(tr$mun_from,tr$mun_to)
+	# x <- with(tr, aggregate(FromZoneID,FUN=function(x) length(unique(x)),by=list(mun_from)))
+	# x <- with(tr, aggregate(Tcar,FUN=function(x) c(m=mean(x),s=sd(x)),by=list(mun_com)))
+
+
+	
+	
+	
+	dt <- data.frame(	dt,
+						Ncar = tr$Ture10,
+						Ccar = Ccar,
+						Tcar = Tcar,
+						Npub = tr$Ture_kol10,
+						Cpub = Cpub,
+						Tpub = Tpub
+						)
+	
+	
+	# Remove NA's 
+	dt$Ncar[which(is.na(dt$Ncar))] <- 0
+	dt$Npub[which(is.na(dt$Npub))] <- 0
+	
+	index <- which(is.na(Cpub))
+	dt$Cpub[index] <- dt$Ccar[index]
+	index <- which(is.na(Tpub))
+	dt$Tpub[index] <- dt$Tcar[index]
+	
+	
+	n <- length(unique(dt$mun_from))
+	# Aggregate to municipality level and create matrices 
+	x <- aggregate(Ncar ~ mun_from + mun_to,FUN=sum,data=dt)
+	dt <- join(dt,x,by=c("mun_from","mun_to"))
+	names(dt)[ncol(dt)]<- "Ncar_ab"
+	head(x)
+
+	x <- aggregate(Npub ~ mun_from + mun_to,FUN=sum,data=dt)
+	dt <- join(dt,x,by=c("mun_from","mun_to"))
+	names(dt)[ncol(dt)]<- "Npub_ab"
+	head(x)
+	
+	
+	# Aggregate cost 
+	x <- data.frame(mun_from=dt$mun_from, mun_to= dt$mun_to, C = (dt$Ccar * dt$Ncar + dt$Cpub * dt$Npub)/(dt$Ncar_ab + dt$Npub_ab))
+	y <- aggregate(C ~ mun_from + mun_to,FUN=sum,data=x)
+	dt <- join(dt,y,by=c("mun_from","mun_to"))
+	names(dt)[ncol(dt)]<- "C_ab"
+	C <- matrix(y$C,n,n)
+	
+	
+	# Aggregate time
+	x <- data.frame(mun_from=dt$mun_from, mun_to= dt$mun_to, T = (dt$Tcar * dt$Ncar + dt$Tpub * dt$Npub)/(dt$Ncar_ab + dt$Npub_ab))
+	y <- aggregate(T ~ mun_from + mun_to,FUN=sum,data=x)
+	dt <- join(dt,y,by=c("mun_from","mun_to"))
+	names(dt)[ncol(dt)]<- "T_ab"
+	T <- matrix(y$T,n,n)
+	
+	
+	# Calculate differentials
+	load("commute_list")
+	load("house")
+	load("wage")
+	
+	# People need to go to work and back so T + t(T)
+	f <- colSums((t(T) + T ) * commute_list$condprob_work_res )
+	hat_f <- (f - mean(f))/mean(f)
+	
+	hat_p <- house$price_diff
+	
+	hat_w <- colSums(wage$wage_diff * commute_list$condprob_work_res)
+	
+	
+	# Calculate amenity index
+	s_w <- 0.833
+	s_c <- 0.143
+	s_y <- 0.315
+	bar_f <- 2*sum(commute_list$count_res_work * T)/sum(commute_list$count_res_work) / 60
+	bar_h <- 7.4
+	
+	pQ <- s_y * hat_p + (s_w * bar_f / bar_h + s_c) * hat_f - s_w * hat_w 
+	
+	
+	dk <- st_read("dk2.shp", stringsAsFactors = FALSE)
+	pdf("Transport_Blue.pdf",width=6,height=4,paper='special')
+	dk[,5] <- hat_f[dk$order]
+	names(dk)[5] <- "TransportCost"
+	map <- tm_shape(dk) + tm_polygons("TransportCost", midpoint = NA,palette="Blues",n=10)
+	map
+	dev.off()
+	
+	pdf("Wages_Red.pdf",width=6,height=4,paper='special')
+	dk[,5] <- hat_w[dk$order]
+	names(dk)[5] <- "Wages"
+	map <- tm_shape(dk) + tm_polygons("Wages", midpoint = NA,palette="Greens",n=10)
+	map
+	dev.off()
+	
+	
+	pdf("House_Orange.pdf",width=6,height=4,paper='special')
+	dk[,5] <- hat_p[dk$order]
+	names(dk)[5] <- "HousePrices"
+	map <- tm_shape(dk) + tm_polygons("HousePrices", midpoint = NA,palette="YlOrRd",n=10)
+	map
+	dev.off()
+	
+	pdf("Amenity_Red.pdf",width=6,height=4,paper='special')
+	dk[,5] <- pQ[dk$order]
+	names(dk)[5] <- "Amenities"
+	map <- tm_shape(dk) + tm_polygons("Amenities", midpoint = NA,palette="Reds",n=10)
+	map
+	dev.off()
+	
+	
+	
+	# Make a ranking and a table of top 5 buttom 5
+	ddf <- data.frame( 	id = commute_list$id,
+						name = commute_list$name,
+						amenity = pQ,
+						wage = hat_w,
+						rent = hat_p,
+						transport = hat_f
+						)
+						
+	index <- match(ddf$id,dk$id)
+	ddf$name <- dk$name[index]
+	
+	
+	# Buttom 5 table
+	print(xtable(ddf[order(ddf$amenity),][1:5,-1]), include.rownames=FALSE)
+
+	# Top five 
+	print(xtable(ddf[rev(order(ddf$amenity)),][1:5,-1]), include.rownames=FALSE)
+
+	# Complete table
+	print(xtable(ddf[rev(order(ddf$amenity)),-1]), include.rownames=FALSE)
+
+	
+	
+	
+	###########################################################################
+	# Prepare data for municipalities
+	# add transport data as well
+	###########################################################################
+	
+	df_temp <- read.table("muni.csv",sep=";",dec=",",header=TRUE)
+	df_temp$name <- unlist(strsplit(as.character(df_temp$name),split=" "))[ 1:98*2-1]
+	index <- matchnames(ddf$name,df_temp$name)
+	# which(ddf$name!=df_temp$name[index$n])
+	df_temp <- df_temp[index$n,]
+	df_temp$id <- ddf$id
+	
+	
+	index <- c(	"id","TaxService","ServiceLevel","beskatningsgrundlag",
+				"FuldtidsledigePer100","FullTimeUnemployedPer100","udgOverførsler","Share_65",
+				"ShareWithProfDegree" ,"PrivateSchoolsPerstudent", 
+				"AndelBefBy","Popdensity",
+				"SharePendlingOut","SharePendlingIn",
+				"g10","g09","g08",
+				"dist_highway_93","dist_highway_2010")
+				
+				
+	df_temp <- df_temp[,index]
+	
+	df_temp2 <- read.table("SpJoin.csv",sep=";",dec=",",header=TRUE)
+	df_temp2 <- df_temp2[-which(is.na(df_temp2$NYKOMNR)),]
+	df_temp2$id <- df_temp2$NYKOMNR
+	x <- aggregate(Afg_dgn~id,FUN=function(x) mean(x,na.rm=TRUE),data=df_temp2)
+	
+	ddf2 <- merge(ddf,df_temp,by.x="id",by.y="id")
+	ddf2 <- merge(ddf2,x,by.x="id",by.y="id")
+	
+	# change distance to be measured in kilometers
+	ddf2$dist_highway_93 <- ddf2$dist_highway_93/1000
+	ddf2$dist_highway_2010 <- ddf2$dist_highway_2010/1000
+	
+	
+	modelnames1 <- c("Afg_dgn","dist_highway_2010","dist_highway_93")
+	mf1 <- paste( "amenity~",paste(modelnames1,collapse="+",sep=""))
+	model_1 <- lm( mf1,data=ddf2)	
+	
+	modelnames2 <-  c(	"TaxService","ServiceLevel","beskatningsgrundlag","FuldtidsledigePer100",   
+						"FullTimeUnemployedPer100","udgOverførsler","Share_65","ShareWithProfDegree",
+						"PrivateSchoolsPerstudent","AndelBefBy","Popdensity","SharePendlingOut","SharePendlingIn")				
+	mf2 <- paste( "amenity~",paste(modelnames2,collapse="+",sep=""))
+	mf2 <- as.formula(mf)
+	model_2 <- lm(mf2, data=ddf2)
+	
+	mf3 <- paste( "amenity~",paste(c(modelnames1,modelnames2),collapse="+",sep=""))
+	model_3 <- lm(mf3, data=ddf2)
+	stargazer(model_1,model_2,model_3)
+	
+	ddf2$growth <- with(ddf2,(1+g10)*(1+g09)*(1+g08))^(1/3) - 1
+	model_4 <- lm( growth ~ amenity,data=ddf2)
+	
+	pdf("popgrowth.pdf",width=15,height=9,paper='special')
+	plot(ddf2$amenity,ddf2$growth,xlab="MWTP",ylab="Average population growth 2007-10",pch=20)
+	points(sort(ddf2$amenity),model_4$coef[1] + model_4$coef[2]*sort(ddf2$amenity),type="l",lwd=1,col="red")
+	dev.off()
+	
+	# Some regression plots ... 
+	x1 <- hat_p 
+	x2 <- (1/s_y) * ((s_w * bar_f / bar_h + s_c) * hat_f)
+	x3 <- (1/s_y) * (s_w * hat_w)
+	x4 <- (1/s_y) * ((s_w * bar_f / bar_h + s_c) * hat_f) - (1/s_y) * (s_w * hat_w)
+
+
+	# Plot of commute cost against housing prices
+	pdf("houseprice_commutingcost.pdf",width=21,height=7,paper='special')
+	plot(x2,x1,ylab="Housing prices",xlab="Corrected commuting cost",pch=20)
+	m <- lm(x1~x2-1)
+	points(sort(x2),m$coef[1]*sort(x2),type="l",lwd=1,col="red")
+	points(x2,x1,pch=20)
+	text(x2,x1,labels=dk$name[match(commute_list$id,dk$id)],pos=1,offset=0.3,cex=0.6)
+	dev.off()
+
+	# Plot of wages against housing prices
+	pdf("houseprice_wages.pdf",width=21,height=7,paper='special')
+	plot(x3,x1,xlab="Corrected wages",ylab="Housing prices",pch=20)
+	m <- lm(x1~x3-1)
+	points(sort(x3),m$coef[1]*sort(x3),type="l",lwd=1,col="red")
+	points(x3,x1,pch=20)
+	text(x3,x1,labels=dk$name[match(commute_list$id,dk$id)],pos=1,offset=0.3,cex=0.6)
+	dev.off()
+
+	# Plot of combined wages and commute cost against housing prices
+	pdf("houseprice_wage_net_cc.pdf",width=21,height=7,paper='special')
+		# Plot of combined wages and commute cost against housing prices
+	plot(x4,x1,ylab="Housing prices",xlab="Corrected wages net commuting cost",pch=20)
+	m <- lm(x1~x4)
+	points(sort(x4),m$coef[1]+m$coef[2]*sort(x4),type="l",lwd=1,col="red")
+	points(x4,x1,pch=20)
+	l <- dk$name[match(commute_list$id,dk$id)]
+	index_above <- which(l%in%c("Albertslund","Herlev","Frederiksberg","Rudersdal",
+	"Tårnby","Kolding","Varde","Vordingborg","Holbæk","Sorø","Lejre","Odder","Guldborgsund",
+	"Rebild","Frederikssund","Nyborg","Aabenraa"))
+	index_left <- which(l%in%c("Silkeborg","Kalundborg","Bornholm","Gribskov",
+	"Skive","Langeland","Vallensbæk","Furesø","Struer","Næstved","Vejle","Hedensted"))
+	position <- rep(1,98)
+	position[index_above]<-3
+	position[index_left]<-2
+	text(x4,x1,labels=dk$name[match(commute_list$id,dk$id)],pos=position,offset=0.3,cex=0.6)
+	dev.off()
+
+
+	# Make regression model with amenities ....
+	
